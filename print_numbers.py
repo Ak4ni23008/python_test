@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """
-Script to print numbers from 1 to 10
+Script to print first 10 multiples of 2
 """
 
+print("First 10 multiples of 2:")
 for i in range(1, 11):
-    print(i)
+    multiple = i * 2
+    print(f"{i}: {multiple}")
