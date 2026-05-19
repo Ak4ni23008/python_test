@@ -1,37 +1,32 @@
-# Cloud Code Runner
+# Trading App on Railway
 
-Paste Python → **Run** → executes on **Railway** (cloud).
+One URL for **Backtesting**, **Live Trading**, and **Custom Code**.
 
-## Option A — Use Railway URL (recommended)
+**Live URL:** https://pythontest-production-9440.up.railway.app/
 
-1. Railway → **Networking** → copy your public URL (e.g. `https://python-test-production-xxxx.up.railway.app`)
-2. Open that URL in the browser
-3. Paste code → **▶ Run in cloud**
+## Pages
 
-You should see: **Running on: ☁️ Railway cloud**
+| URL | What it does |
+|-----|----------------|
+| `/` | Dashboard home |
+| `/backtest` | Run backtest on CSV (upload or demo `yesbank_5m.csv`) |
+| `/live` | Dhan live strategy (Yes Bank) — use **Dry Run** first |
+| `/code` | Paste & run Python |
 
-## Option B — Local Streamlit → remote Railway
+## Railway Variables
 
-```powershell
-cd "C:\Users\akash\Downloads\dhan\Users\mahad\Downloads\Users\akash\OneDrive\Desktop\trading\back_testing"
-
-$env:CLOUD_RUNNER_URL = "https://YOUR-RAILWAY-URL.up.railway.app"
-
-python -m pip install streamlit requests
-python -m streamlit run cloud_app.py
-```
-
-Click **▶ Run on Railway** — code runs on Railway, not your PC.
-
-## Railway variables
-
-| Variable | Purpose |
-|----------|---------|
+| Variable | Required for |
+|----------|----------------|
+| `DHAN_CLIENT_ID` | Real live trading |
+| `DHAN_ACCESS_TOKEN` | Real live trading |
 | `GITHUB_TOKEN` | Save to GitHub button (optional) |
 
-## Do NOT use
+## Live trading tips
 
-- `http://localhost:8501` — runs on your laptop only
-- `http://10.10.x.x:8501` — same, your local network
+- Keep **Dry Run** checked until ready for real orders
+- **Instant test** runs buy/sell in ~5 seconds (good for cloud testing)
+- Uncheck Instant to use real market times (will wait until buy/sell time)
 
-Use your **Railway public HTTPS URL** for cloud runs.
+## Deploy
+
+Push to [github.com/Ak4ni23008/python_test](https://github.com/Ak4ni23008/python_test) → Railway auto-redeploys.
