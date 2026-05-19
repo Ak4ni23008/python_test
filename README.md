@@ -1,31 +1,37 @@
 # Cloud Code Runner
 
-Paste Python in the browser → **Run in cloud** → code runs on **Railway** and is **pushed to GitHub**.
+Paste Python → **Run** → executes on **Railway** (cloud).
 
-Repo: [github.com/Ak4ni23008/python_test](https://github.com/Ak4ni23008/python_test)
+## Option A — Use Railway URL (recommended)
 
-## Railway setup (one time)
+1. Railway → **Networking** → copy your public URL (e.g. `https://python-test-production-xxxx.up.railway.app`)
+2. Open that URL in the browser
+3. Paste code → **▶ Run in cloud**
 
-1. Deploy from this repo (already connected).
-2. **Variables** → add:
-   - `GITHUB_TOKEN` — [GitHub PAT](https://github.com/settings/tokens) with **repo** scope
-   - `GITHUB_REPO` = `Ak4ni23008/python_test` (optional, this is the default)
-   - `GITHUB_BRANCH` = `main` (optional)
+You should see: **Running on: ☁️ Railway cloud**
 
-3. Open your Railway public URL.
+## Option B — Local Streamlit → remote Railway
 
-## Daily use
+```powershell
+cd "C:\Users\akash\Downloads\dhan\Users\mahad\Downloads\Users\akash\OneDrive\Desktop\trading\back_testing"
 
-1. Paste or edit code in the text box.
-2. Click **▶ Run in cloud**.
-3. See output on the page (runs on Railway immediately).
-4. Code is saved to `user_code.py` on GitHub (Railway redeploys in the background).
+$env:CLOUD_RUNNER_URL = "https://YOUR-RAILWAY-URL.up.railway.app"
 
-## Files
+python -m pip install streamlit requests
+python -m streamlit run cloud_app.py
+```
 
-| File | Role |
-|------|------|
-| `cloud_app.py` | Web UI |
-| `code_runner.py` | Runs pasted code on the server |
-| `github_push.py` | Pushes to GitHub API |
-| `user_code.py` | Last saved code (in repo) |
+Click **▶ Run on Railway** — code runs on Railway, not your PC.
+
+## Railway variables
+
+| Variable | Purpose |
+|----------|---------|
+| `GITHUB_TOKEN` | Save to GitHub button (optional) |
+
+## Do NOT use
+
+- `http://localhost:8501` — runs on your laptop only
+- `http://10.10.x.x:8501` — same, your local network
+
+Use your **Railway public HTTPS URL** for cloud runs.

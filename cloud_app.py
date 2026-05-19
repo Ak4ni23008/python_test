@@ -1,35 +1,24 @@
 """
-Cloud Code Runner — paste Python, click Run:
-  1. Runs on Railway server (immediate)
-  2. Pushes to GitHub (saves code; Railway redeploys from repo)
+Local Streamlit UI — Run calls your Railway server (not this laptop).
+
+Set before running:
+  $env:CLOUD_RUNNER_URL = "https://your-app.up.railway.app"
 """
 
 from __future__ import annotations
 
 import os
-from datetime import datetime
-from zoneinfo import ZoneInfo
+import socket
 
+import requests
 import streamlit as st
 
 from code_runner import USER_CODE_FILE, run_python_code
 from github_push import push_file
 
-IST = ZoneInfo("Asia/Kolkata")
-
-DEFAULT_CODE = '''# Your code runs on Railway — not on your laptop
-for i in range(1, 11):
+DEFAULT_CODE = '''for i in range(1, 11):
     print(i)
 '''
-
-st.set_page_config(
-    page_title="Cloud Code Runner",
-    page_icon="☁️",
-    layout="wide",
-)
-
-st.title("☁️ Cloud Code Runner")
-st.caption("Paste code → **Run** → executes on Railway + saves to GitHub")
 
 if USER_CODE_FILE.exists():
     try:
@@ -39,67 +28,62 @@ if USER_CODE_FILE.exists():
     except OSError:
         pass
 
-code = st.text_area(
-    "Python code",
-    value=DEFAULT_CODE,
-    height=360,
-    help="Edit and click Run. Output appears below.",
-)
+CLOUD_URL = os.getenv("CLOUD_RUNNER_URL", "").strip().rstrip("/")
+LOCAL_HOST = socket.gethostname()
 
-col1, col2, col3 = st.columns([1, 1, 2])
+st.set_page_config(page_title="Cloud Code Runner", page_icon="☁️", layout="wide")
+
+st.title("☁️ Cloud Code Runner (local UI)")
+
+if CLOUD_URL:
+    st.success(f"Cloud server: `{CLOUD_URL}` — Run will execute **on Railway**")
+else:
+    st.error(
+        "**CLOUD_RUNNER_URL not set** — Run only works on your laptop right now.\n\n"
+        "Set your Railway URL:\n"
+        "`$env:CLOUD_RUNNER_URL = \"https://your-app.up.railway.app\"`"
+    )
+    st.info("Or open your **Railway public URL** directly in the browser (no Streamlit needed).")
+
+st.caption(f"This page is on: **{LOCAL_HOST}** (your PC)")
+
+code = st.text_area("Python code", value=DEFAULT_CODE, height=360)
+
+col1, col2 = st.columns(2)
 with col1:
-    run_clicked = st.button("▶ Run in cloud", type="primary", use_container_width=True)
+    run_clicked = st.button("▶ Run on Railway", type="primary", use_container_width=True)
 with col2:
-    push_only = st.button("Push to GitHub only", use_container_width=True)
-
-github_ok = bool(os.getenv("GITHUB_TOKEN", "").strip())
-with col3:
-    if github_ok:
-        st.success("GitHub token configured")
-    else:
-        st.warning("Add `GITHUB_TOKEN` in Railway Variables to push to GitHub")
+    save_clicked = st.button("Save to GitHub", use_container_width=True)
 
 st.markdown("---")
 
-if run_clicked or push_only:
-    steps: list[str] = []
-
-    if run_clicked:
-        with st.spinner("Step 1/2 — Running on Railway server…"):
-            exit_code, stdout, stderr = run_python_code(code)
-            steps.append("Ran on Railway server")
-
-        st.subheader("Output")
-        if stdout:
-            st.code(stdout, language="text")
+if run_clicked:
+    if not CLOUD_URL:
+        st.warning("Running locally instead (no cloud URL set)…")
+        exit_code, stdout, stderr = run_python_code(code)
+        st.code(stdout or "(no output)")
         if stderr:
-            st.subheader("Errors")
-            st.code(stderr, language="text")
+            st.error(stderr)
+    else:
+        with st.spinner(f"Calling Railway at {CLOUD_URL}…"):
+            try:
+                resp = requests.post(
+                    f"{CLOUD_URL}/api/run",
+                    json={"code": code},
+                    timeout=120,
+                )
+                data = resp.json()
+                st.success(f"Ran on Railway host: `{data.get('host', '?')}`")
+                st.code(data.get("stdout") or "(no output)")
+                if data.get("stderr"):
+                    st.error(data["stderr"])
+            except requests.RequestException as exc:
+                st.error(f"Could not reach Railway: {exc}")
+                st.info("Check Railway deploy is **Active** (not Stopping). Open Railway URL in browser instead.")
 
-        if exit_code == 0:
-            st.success(f"Finished (exit code {exit_code})")
-        else:
-            st.error(f"Finished with exit code {exit_code}")
-
-    if run_clicked or push_only:
-        with st.spinner("Step 2/2 — Pushing to GitHub…"):
-            ts = datetime.now(tz=IST).strftime("%Y-%m-%d %H:%M:%S IST")
-            result = push_file(
-                code,
-                message=f"Cloud Runner update {ts}",
-            )
-
-        if result.get("ok"):
-            st.success("Pushed to GitHub")
-            if result.get("html_url"):
-                st.markdown(f"[View commit]({result['html_url']})")
-            st.caption(
-                f"Repo: `{result.get('repo')}` · branch: `{result.get('branch')}` · "
-                f"file: `{result.get('path')}`"
-            )
-            st.info(
-                "Railway will redeploy from GitHub in the background (usually 1–3 min). "
-                "Your code already ran on the server above."
-            )
-        else:
-            st.error(result.get("error", "GitHub push failed"))
+if save_clicked:
+    result = push_file(code, message="Save from local Cloud Runner")
+    if result.get("ok"):
+        st.success(f"Pushed: {result.get('html_url', '')}")
+    else:
+        st.error(result.get("error", "Push failed"))
