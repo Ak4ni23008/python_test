@@ -1,5 +1,26 @@
 # Deploy to Railway (cloud)
 
+## Simple test (current setup)
+
+Right now `Procfile` runs **`simple_test.py`** — prints `1` to `10` in logs and shows them in the browser. No Dhan keys needed.
+
+1. Push to GitHub → deploy on Railway → **Generate Domain**
+2. Open the URL — you should see numbers 1–10
+3. **Deploy Logs** also show `1` … `10`
+
+When you have `CLIENT_ID` and `ACCESS_TOKEN`, edit `simple_test.py` (or switch back to Streamlit — see below).
+
+**Switch back to full dashboard later:**
+
+```text
+# Rename / copy Procfile.streamlit → Procfile
+web: streamlit run app.py ...
+```
+
+---
+
+## Full app (Streamlit + live trading)
+
 Run the **Streamlit dashboard** on Railway so you don't need your laptop on. Use a **second Railway service + cron** for scheduled live trading.
 
 ## What runs where
