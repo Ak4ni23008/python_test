@@ -1,21 +1,19 @@
 # Deploy to Railway (cloud)
 
-## Simple test (current setup)
+## Cloud Run button (current setup)
 
-Right now `Procfile` runs **`simple_test.py`** — prints `1` to `10` in logs and shows them in the browser. No Dhan keys needed.
+`Procfile` runs **`cloud_app.py`** (Streamlit). Open your Railway URL → click **▶ Run** → `job.py` runs **on the server**.
 
-1. Push to GitHub → deploy on Railway → **Generate Domain**
-2. Open the URL — you should see numbers 1–10
-3. **Deploy Logs** also show `1` … `10`
+| Action | Need git push? |
+|--------|----------------|
+| Click **Run** on the website | **No** |
+| Change what the code does (`job.py`) | **Yes** (once per code change) |
 
-When you have `CLIENT_ID` and `ACCESS_TOKEN`, edit `simple_test.py` (or switch back to Streamlit — see below).
+1. Push to GitHub once → Railway deploys → **Generate Domain**
+2. Bookmark the URL — use **Run** anytime from phone/laptop
+3. Edit `job.py` when you add Dhan logic; push only when code changes
 
-**Switch back to full dashboard later:**
-
-```text
-# Rename / copy Procfile.streamlit → Procfile
-web: streamlit run app.py ...
-```
+**Older files:** `simple_test.py` (auto-run on page load), `app.py` (full dashboard) — use `Procfile.streamlit` for the big dashboard later.
 
 ---
 
