@@ -21,7 +21,7 @@ from backtest_20min import BacktestConfig, backtest
 from code_runner import run_python_code
 from github_push import push_file
 from live_trade_0920_0921 import LiveConfig, YES_BANK_SECURITY_ID, run_once
-from web_ui import esc, page
+from web_ui import esc, module_tabs, page
 
 app = FastAPI(title="Trading App")
 
@@ -30,13 +30,25 @@ UPLOAD_DIR = ROOT / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 DEFAULT_CSV = ROOT / "yesbank_5m.csv"
 USER_CODE_FILE = ROOT / "user_code.py"
+BACKTEST_CODE_FILE = ROOT / "backtest_code.py"
+LIVE_CODE_FILE = ROOT / "live_code.py"
 IST = ZoneInfo("Asia/Kolkata")
 
-DEFAULT_CODE = (
-    USER_CODE_FILE.read_text(encoding="utf-8")
-    if USER_CODE_FILE.exists()
-    else "for i in range(1, 11):\n    print(i)\n"
-)
+
+def _read_code_file(path: Path, fallback: str) -> str:
+    if path.exists():
+        try:
+            text = path.read_text(encoding="utf-8")
+            if text.strip():
+                return text
+        except OSError:
+            pass
+    return fallback
+
+
+DEFAULT_CODE = _read_code_file(USER_CODE_FILE, "for i in range(1, 11):\n    print(i)\n")
+DEFAULT_BACKTEST_CODE = _read_code_file(BACKTEST_CODE_FILE, "")
+DEFAULT_LIVE_CODE = _read_code_file(LIVE_CODE_FILE, "")
 
 
 def _capture_output(fn) -> tuple[str, str, int]:
@@ -67,79 +79,9 @@ def _dhan_status() -> str:
     return "Dhan keys NOT set — add DHAN_CLIENT_ID & DHAN_ACCESS_TOKEN in Railway Variables"
 
 
-@app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
-
-
-@app.get("/", response_class=HTMLResponse)
-def home() -> HTMLResponse:
-    body = """
-<div class="card">
-  <p>All modules run on <strong>Railway cloud</strong> when you click Run.</p>
-  <div class="metrics">
-    <div class="metric"><b>Backtesting</b><span>Test strategy on CSV data</span></div>
-    <div class="metric"><b>Live Trading</b><span>Dhan orders (Yes Bank)</span></div>
-    <div class="metric"><b>Custom Code</b><span>Paste & run Python</span></div>
-  </div>
-  <p class="hint">""" + esc(_dhan_status()) + """</p>
-</div>
-"""
-    return HTMLResponse(page("Dashboard", "/", body))
-
-
-@app.get("/backtest", response_class=HTMLResponse)
-def backtest_form() -> HTMLResponse:
-    return HTMLResponse(page("Backtesting", "/backtest", backtest_form_body()))
-
-
-@app.post("/backtest/run", response_class=HTMLResponse)
-async def backtest_run(
-    entry_mode: str = Form("buy_0915_sell_0935"),
-    quantity: int = Form(1),
-    hold_minutes: int = Form(20),
-    brokerage: float = Form(20.0),
-    slippage: float = Form(5.0),
-    price_field: str = Form("open"),
-    csv_file: UploadFile | None = File(None),
-) -> HTMLResponse:
-    csv_path = DEFAULT_CSV
-    if csv_file and csv_file.filename:
-        dest = UPLOAD_DIR / f"{uuid.uuid4().hex}_{csv_file.filename}"
-        content = await csv_file.read()
-        dest.write_bytes(content)
-        csv_path = dest
-
-    cfg = BacktestConfig(
-        csv_path=str(csv_path),
-        entry_mode=entry_mode,  # type: ignore[arg-type]
-        entry_price=price_field,  # type: ignore[arg-type]
-        exit_price=price_field,  # type: ignore[arg-type]
-        hold_minutes=hold_minutes,
-        quantity=quantity,
-        brokerage_per_trade=brokerage,
-        slippage_bps=slippage,
-    )
-
-    try:
-        trades, stats = backtest(cfg)
-        lines = ["=== STATS ==="]
-        for k, v in stats.items():
-            lines.append(f"{k}: {v}")
-        lines.append("\n=== LAST 10 TRADES ===")
-        if len(trades):
-            lines.append(trades.tail(10).to_string(index=False))
-        else:
-            lines.append("No trades.")
-        output = "\n".join(lines)
-        return HTMLResponse(page("Backtesting", "/backtest", backtest_form_body(), output=output))
-    except Exception as exc:
-        return HTMLResponse(page("Backtesting", "/backtest", backtest_form_body(), error=str(exc)))
-
-
-def backtest_form_body() -> str:
+def _backtest_form_inner() -> str:
     return f"""
-<form method="post" action="/backtest/run" enctype="multipart/form-data" class="card">
+<form method="post" action="/backtest/run" enctype="multipart/form-data">
   <p class="hint">Upload OHLC CSV or use demo <code>{esc(DEFAULT_CSV.name)}</code></p>
   <label>CSV file (optional)</label>
   <input type="file" name="csv_file" accept=".csv"/>
@@ -165,30 +107,155 @@ def backtest_form_body() -> str:
 </form>"""
 
 
-@app.get("/live", response_class=HTMLResponse)
-def live_form() -> HTMLResponse:
-    body = f"""
-<form method="post" action="/live/run" class="card">
-  <p class="warn" style="padding:0.75rem;border-radius:8px;background:#451a03;">
-    ⚠ Live trading places real orders when Dry Run is OFF. Test with Dry Run first.
+def _backtest_code_inner(code: str) -> str:
+    return f"""
+<form method="post" action="/backtest/code">
+  <p class="hint">Write Python using <code>backtest_20min</code>. Runs in cloud on Railway.</p>
+  <textarea name="code" class="code-editor">{esc(code)}</textarea>
+  <button type="submit" class="primary">▶ Run Code</button>
+</form>"""
+
+
+def backtest_page(code: str | None = None, active: str = "form") -> str:
+    c = code if code is not None else DEFAULT_BACKTEST_CODE
+    return module_tabs(_backtest_form_inner(), _backtest_code_inner(c), active=active)
+
+
+def _live_form_inner(
+    quantity: int = 1,
+    security_id: str = YES_BANK_SECURITY_ID,
+    buy_time: str = "11:55",
+    sell_time: str = "11:56",
+    is_dry: bool = True,
+    is_instant: bool = True,
+) -> str:
+    return f"""
+<form method="post" action="/live/run">
+  <p class="hint" style="padding:0.5rem;background:#451a03;border-radius:6px;">
+    ⚠ Uncheck Dry Run only when ready for real orders.
   </p>
   <p class="hint">{esc(_dhan_status())}</p>
   <div class="row">
-    <div><label>Quantity</label><input type="number" name="quantity" value="1" min="1"/></div>
-    <div><label>Security ID (Yes Bank default)</label>
-      <input type="text" name="security_id" value="{YES_BANK_SECURITY_ID}"/></div>
+    <div><label>Quantity</label><input type="number" name="quantity" value="{quantity}"/></div>
+    <div><label>Security ID</label><input type="text" name="security_id" value="{esc(security_id)}"/></div>
   </div>
   <div class="row">
-    <div><label>Buy time (HH:MM IST)</label><input type="text" name="buy_time" value="11:55"/></div>
-    <div><label>Sell time (HH:MM IST)</label><input type="text" name="sell_time" value="11:56"/></div>
+    <div><label>Buy time (HH:MM)</label><input type="text" name="buy_time" value="{esc(buy_time)}"/></div>
+    <div><label>Sell time (HH:MM)</label><input type="text" name="sell_time" value="{esc(sell_time)}"/></div>
   </div>
-  <label class="check"><input type="checkbox" name="dry_run" value="1" checked/> Dry Run (no real orders)</label>
-  <label class="check"><input type="checkbox" name="instant" value="1" checked/>
-    Instant test (buy/sell in ~5 sec — for cloud testing)</label>
+  <label class="check"><input type="checkbox" name="dry_run" value="1" {"checked" if is_dry else ""}/> Dry Run</label>
+  <label class="check"><input type="checkbox" name="instant" value="1" {"checked" if is_instant else ""}/> Instant test (~5 sec)</label>
   <button type="submit" class="primary">▶ Run Live Strategy</button>
-</form>
-"""
-    return HTMLResponse(page("Live Trading", "/live", body))
+</form>"""
+
+
+def _live_code_inner(code: str) -> str:
+    return f"""
+<form method="post" action="/live/code">
+  <p class="hint">Write Python using <code>live_trade_0920_0921</code>. Use <code>dry_run=True</code> first.</p>
+  <textarea name="code" class="code-editor">{esc(code)}</textarea>
+  <button type="submit" class="primary">▶ Run Code</button>
+</form>"""
+
+
+def live_page(
+    code: str | None = None,
+    active: str = "form",
+    **form_kw,
+) -> str:
+    c = code if code is not None else DEFAULT_LIVE_CODE
+    return module_tabs(_live_form_inner(**form_kw), _live_code_inner(c), active=active)
+
+
+@app.get("/health")
+def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/", response_class=HTMLResponse)
+def home() -> HTMLResponse:
+    body = """
+<div class="card">
+  <p>All modules run on <strong>Railway cloud</strong> when you click Run.</p>
+  <div class="metrics">
+    <div class="metric"><b>Backtesting</b><span>Form or write code</span></div>
+    <div class="metric"><b>Live Trading</b><span>Form or write code</span></div>
+    <div class="metric"><b>Custom Code</b><span>Any Python</span></div>
+  </div>
+  <p class="hint">""" + esc(_dhan_status()) + """</p>
+</div>"""
+    return HTMLResponse(page("Dashboard", "/", body))
+
+
+@app.get("/backtest", response_class=HTMLResponse)
+def backtest_form() -> HTMLResponse:
+    return HTMLResponse(page("Backtesting", "/backtest", backtest_page()))
+
+
+@app.post("/backtest/run", response_class=HTMLResponse)
+async def backtest_run(
+    entry_mode: str = Form("buy_0915_sell_0935"),
+    quantity: int = Form(1),
+    hold_minutes: int = Form(20),
+    brokerage: float = Form(20.0),
+    slippage: float = Form(5.0),
+    price_field: str = Form("open"),
+    csv_file: UploadFile | None = File(None),
+) -> HTMLResponse:
+    csv_path = DEFAULT_CSV
+    if csv_file and csv_file.filename:
+        dest = UPLOAD_DIR / f"{uuid.uuid4().hex}_{csv_file.filename}"
+        dest.write_bytes(await csv_file.read())
+        csv_path = dest
+
+    cfg = BacktestConfig(
+        csv_path=str(csv_path),
+        entry_mode=entry_mode,  # type: ignore[arg-type]
+        entry_price=price_field,  # type: ignore[arg-type]
+        exit_price=price_field,  # type: ignore[arg-type]
+        hold_minutes=hold_minutes,
+        quantity=quantity,
+        brokerage_per_trade=brokerage,
+        slippage_bps=slippage,
+    )
+
+    try:
+        trades, stats = backtest(cfg)
+        lines = ["=== STATS ==="]
+        for k, v in stats.items():
+            lines.append(f"{k}: {v}")
+        lines.append("\n=== LAST 10 TRADES ===")
+        lines.append(
+            trades.tail(10).to_string(index=False) if len(trades) else "No trades."
+        )
+        return HTMLResponse(
+            page("Backtesting", "/backtest", backtest_page(), output="\n".join(lines))
+        )
+    except Exception as exc:
+        return HTMLResponse(
+            page("Backtesting", "/backtest", backtest_page(), error=str(exc))
+        )
+
+
+@app.post("/backtest/code", response_class=HTMLResponse)
+def backtest_code(code: str = Form(...)) -> HTMLResponse:
+    BACKTEST_CODE_FILE.write_text(code, encoding="utf-8")
+    exit_code, stdout, stderr = run_python_code(code)
+    err = stderr or (f"Exit code {exit_code}" if exit_code != 0 else "")
+    return HTMLResponse(
+        page(
+            "Backtesting",
+            "/backtest",
+            backtest_page(code, active="code"),
+            output=stdout,
+            error=err,
+        )
+    )
+
+
+@app.get("/live", response_class=HTMLResponse)
+def live_form() -> HTMLResponse:
+    return HTMLResponse(page("Live Trading", "/live", live_page()))
 
 
 @app.post("/live/run", response_class=HTMLResponse)
@@ -220,26 +287,41 @@ def live_run(
     )
 
     stdout, stderr, code = _capture_output(lambda: run_once(cfg))
-    output = stdout or "(no output)"
-    error = stderr if code != 0 else ""
     info = "Dry run — no real money." if is_dry else "REAL ORDERS were attempted."
+    return HTMLResponse(
+        page(
+            "Live Trading",
+            "/live",
+            live_page(
+                active="form",
+                quantity=quantity,
+                security_id=security_id,
+                buy_time=buy_time,
+                sell_time=sell_time,
+                is_dry=is_dry,
+                is_instant=is_instant,
+            ),
+            output=stdout or "(no output)",
+            error=stderr if code != 0 else "",
+            info=info,
+        )
+    )
 
-    live_body = f"""
-<form method="post" action="/live/run" class="card">
-  <div class="row">
-    <div><label>Quantity</label><input type="number" name="quantity" value="{quantity}"/></div>
-    <div><label>Security ID</label><input type="text" name="security_id" value="{esc(security_id)}"/></div>
-  </div>
-  <div class="row">
-    <div><label>Buy time</label><input type="text" name="buy_time" value="{esc(buy_time)}"/></div>
-    <div><label>Sell time</label><input type="text" name="sell_time" value="{esc(sell_time)}"/></div>
-  </div>
-  <label class="check"><input type="checkbox" name="dry_run" value="1" {"checked" if is_dry else ""}/> Dry Run</label>
-  <label class="check"><input type="checkbox" name="instant" value="1" {"checked" if is_instant else ""}/> Instant test</label>
-  <button type="submit" class="primary">▶ Run Live Strategy</button>
-</form>"""
 
-    return HTMLResponse(page("Live Trading", "/live", live_body, output=output, error=error, info=info))
+@app.post("/live/code", response_class=HTMLResponse)
+def live_code_run(code: str = Form(...)) -> HTMLResponse:
+    LIVE_CODE_FILE.write_text(code, encoding="utf-8")
+    exit_code, stdout, stderr = run_python_code(code)
+    err = stderr or (f"Exit code {exit_code}" if exit_code != 0 else "")
+    return HTMLResponse(
+        page(
+            "Live Trading",
+            "/live",
+            live_page(code, active="code"),
+            output=stdout,
+            error=err,
+        )
+    )
 
 
 @app.get("/code", response_class=HTMLResponse)
@@ -247,7 +329,7 @@ def code_form() -> HTMLResponse:
     body = f"""
 <form method="post" action="/code/run" class="card">
   <label>Python code</label>
-  <textarea name="code">{esc(DEFAULT_CODE)}</textarea>
+  <textarea name="code" class="code-editor">{esc(DEFAULT_CODE)}</textarea>
   <button type="submit" class="primary">▶ Run in cloud</button>
   <button type="submit" formaction="/code/save" class="secondary">Save to GitHub</button>
 </form>
@@ -261,7 +343,7 @@ def code_run(code: str = Form(...)) -> HTMLResponse:
     USER_CODE_FILE.write_text(code, encoding="utf-8")
     body = f"""
 <form method="post" action="/code/run" class="card">
-  <textarea name="code">{esc(code)}</textarea>
+  <textarea name="code" class="code-editor">{esc(code)}</textarea>
   <button type="submit" class="primary">▶ Run in cloud</button>
   <button type="submit" formaction="/code/save" class="secondary">Save to GitHub</button>
 </form>"""
@@ -274,14 +356,15 @@ def code_save(code: str = Form(...)) -> HTMLResponse:
     result = push_file(code, message="Save from Trading App")
     body = f"""
 <form method="post" action="/code/run" class="card">
-  <textarea name="code">{esc(code)}</textarea>
+  <textarea name="code" class="code-editor">{esc(code)}</textarea>
   <button type="submit" class="primary">▶ Run in cloud</button>
   <button type="submit" formaction="/code/save" class="secondary">Save to GitHub</button>
 </form>"""
-    if result.get("ok"):
-        info = f"Saved: {result.get('html_url', result.get('path', ''))}"
-    else:
-        info = f"GitHub error: {result.get('error', 'unknown')}"
+    info = (
+        f"Saved: {result.get('html_url', '')}"
+        if result.get("ok")
+        else f"GitHub error: {result.get('error', 'unknown')}"
+    )
     return HTMLResponse(page("Custom Code", "/code", body, info=info))
 
 

@@ -58,7 +58,55 @@ CSS = """
   .metric span { font-size: 0.75rem; color: #94a3b8; }
   input[type=checkbox] { width: auto; margin-right: 0.5rem; }
   .check { display: flex; align-items: center; margin-top: 0.75rem; }
+  .tabs-bar { display: flex; gap: 0.35rem; margin-bottom: 1rem; }
+  .tab-btn { padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid #334155; background: #1e293b;
+             color: #94a3b8; cursor: pointer; font-size: 0.9rem; margin-top: 0; }
+  .tab-btn.active { background: #2563eb; color: white; border-color: #2563eb; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+  textarea.code-editor { min-height: 320px; }
 """
+
+TAB_SCRIPT = """
+<script>
+document.querySelectorAll('.tabs-bar').forEach(function(bar) {
+  var panels = bar.parentElement.querySelectorAll('.tab-panel');
+  bar.querySelectorAll('.tab-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var tab = btn.getAttribute('data-tab');
+      bar.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+      panels.forEach(function(p) { p.classList.remove('active'); });
+      btn.classList.add('active');
+      var panel = bar.parentElement.querySelector('#tab-' + tab);
+      if (panel) panel.classList.add('active');
+    });
+  });
+});
+</script>
+"""
+
+
+def module_tabs(
+    form_html: str,
+    code_html: str,
+    *,
+    active: str = "form",
+) -> str:
+    form_active = "active" if active == "form" else ""
+    code_active = "active" if active == "code" else ""
+    form_btn = "active" if active == "form" else ""
+    code_btn = "active" if active == "code" else ""
+    html = f"""
+<div class="card" style="padding-top:0.75rem;">
+  <div class="tabs-bar">
+    <button type="button" class="tab-btn {form_btn}" data-tab="form">📋 Form</button>
+    <button type="button" class="tab-btn {code_btn}" data-tab="code">⌨️ Write Code</button>
+  </div>
+  <div id="tab-form" class="tab-panel {form_active}">{form_html}</div>
+  <div id="tab-code" class="tab-panel {code_active}">{code_html}</div>
+</div>
+{TAB_SCRIPT}"""
+    return html
 
 
 def nav(active: str) -> str:
