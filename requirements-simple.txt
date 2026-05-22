@@ -1,0 +1,2 @@
+# Minimal deps for simple_test.py only (stdlib — no packages required).
+# Railway: in service settings, set build variable or rename this to requirements.txt for faster builds.
