@@ -1,11 +1,55 @@
+# ⚠️ SECRETS & CREDENTIALS
+# NEVER commit real API keys or credentials!
 .env
+.env.local
+.env.*.local
+.env.production.local
+.env.development.local
+.env.*.txt
+secrets.json
+credentials.json
+
+# Python
 .venv/
 venv/
+env/
+ENV/
 __pycache__/
 *.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
 .pytest_cache/
-.streamlit/secrets.toml
+.coverage
+htmlcov/
+
+# Node
+node_modules/
+.next/
+.npm/
+package-lock.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
 .DS_Store
+Thumbs.db
 *.log
+
+# Data & Uploads
 /tmp/
 uploads/
+*.csv
+*.db
+*.sqlite
+
+# Docker
+.dockerignore
+
+# Streamlit
+.streamlit/secrets.toml
