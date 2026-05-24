@@ -1,0 +1,34 @@
+[Unit]
+Description=CloudTrade Trading Platform
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/cloudtrade
+Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+EnvironmentFile=/opt/cloudtrade/.env.prod
+
+# Start command
+ExecStart=/usr/local/bin/docker-compose up
+
+# Restart policy
+Restart=on-failure
+RestartSec=10s
+
+# Stop command
+ExecStop=/usr/local/bin/docker-compose down
+
+# Resource limits
+MemoryLimit=8G
+CPUQuota=200%
+TasksMax=500
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cloudtrade
+
+[Install]
+WantedBy=multi-user.target
